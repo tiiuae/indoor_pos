@@ -13,6 +13,8 @@ Convert indoor positioning data from lighthouse to PX4 positioning sensor data
 
 //#define INDOOR_USE_SIMULATOR
 
+using std::placeholders::_1;
+
 class IndoorPosPrivate
 {
 public:
@@ -26,9 +28,10 @@ public:
     geodesy::UTMPoint _home;
     SurviveSimpleContext *_actx;
     int _lighthouse_count = 0;
-    uint64_t _start_time = 0;
+    uint64_t _latest_timestamp = 0;
 
     rclcpp::Publisher<px4_msgs::msg::SensorGps>::SharedPtr _publisher;
+    rclcpp::Subscription<px4_msgs::msg::SensorCombined>::SharedPtr _subscriber;
 
 };
 
@@ -38,7 +41,6 @@ IndoorPos::IndoorPos()
 {
     RCLCPP_INFO(this->get_logger(), "Indoor positioning");
     _impl->_node = this;
-    _impl->_start_time = this->now().nanoseconds();
 
     this->declare_parameter<double>("home_lat", 0.0);
     this->declare_parameter<double>("home_lon", 0.0);
@@ -65,6 +67,8 @@ IndoorPos::IndoorPos()
         );
 
     _impl->_publisher = this->create_publisher<px4_msgs::msg::SensorGps>("SensorGps_PubSubTopic", 10);
+    _impl->_subscriber = this->create_subscription<px4_msgs::msg::SensorCombined>(
+      "SensorCombined_PubSubTopic", 10, std::bind(&IndoorPos::sensorCombinedTopicCallback, this, _1));
 
     if (_impl->_update_freq > 0)
     {
@@ -94,6 +98,12 @@ void IndoorPos::surviveSpinTimerCallback()
     _impl->surviveSpin();
 }
 
+void IndoorPos::sensorCombinedTopicCallback(const px4_msgs::msg::SensorCombined::SharedPtr msg) const
+{
+    _impl->_latest_timestamp = msg->timestamp;
+    RCLCPP_INFO(this->get_logger(), "_latest_timestamp: %lu", _impl->_latest_timestamp);
+}
+
 void IndoorPosPrivate::surviveSpin()
 {
     if (survive_simple_wait_for_update(_actx) && rclcpp::ok()) {
@@ -117,14 +127,14 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose)
     utm.altitude += pose.Pos[2];
 
     geographic_msgs::msg::GeoPoint point = toMsg(utm);
-    uint64_t timecode = this->_node->now().nanoseconds() - _start_time;
+  //  uint64_t timecode = this->_node->now().nanoseconds() - _start_time;
 
 /*
     RCLCPP_INFO(this->_node->get_logger(), "[%lu] lat: %.15lf, lon: %.15lf, alt: %.15lf",
         timecode, point.latitude, point.longitude, point.altitude);
 */
     px4_msgs::msg::SensorGps sensor_gps;
-    sensor_gps.timestamp = timecode;
+    sensor_gps.timestamp = _latest_timestamp;
     sensor_gps.lat = (uint32_t) (point.latitude  * 10000000);
     sensor_gps.lon = (uint32_t) (point.longitude * 10000000);
     sensor_gps.alt = (uint32_t) (point.altitude  * 1000);
