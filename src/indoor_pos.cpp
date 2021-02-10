@@ -128,9 +128,23 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose)
     sensor_gps.lat = (uint32_t) (point.latitude  * 10000000);
     sensor_gps.lon = (uint32_t) (point.longitude * 10000000);
     sensor_gps.alt = (uint32_t) (point.altitude  * 1000);
-    sensor_gps.fix_type = 6; // Real-Time Kinematic, fixed
-    sensor_gps.vel_ned_valid = false;
-    sensor_gps.satellites_used = _lighthouse_count;
+    sensor_gps.s_variance_m_s = 0.2f;
+
+    sensor_gps.fix_type = 3;
+    sensor_gps.eph = 0.5f;
+    sensor_gps.epv = 0.8f;
+    sensor_gps.hdop = 0.0f;
+    sensor_gps.vdop = 0.0f;
+
+    sensor_gps.vel_n_m_s = 0.0f;
+    sensor_gps.vel_e_m_s = 0.0f;
+    sensor_gps.vel_d_m_s = 0.0f;
+    sensor_gps.vel_ned_valid = 1;
+
+    sensor_gps.satellites_used = 16; //_lighthouse_count;
+    sensor_gps.heading = NAN;
+    sensor_gps.heading_offset = 0.0f;
+
     _publisher->publish(sensor_gps);
 }
 
