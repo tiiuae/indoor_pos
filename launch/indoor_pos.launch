@@ -1,8 +1,11 @@
 <launch>
+  <arg name="lat" default="61.50361"/>
+  <arg name="lon" default="23.77500"/>
+  <arg name="alt" default="110.0"/>
   <node name="indoor_pos" pkg="indoor_pos" exec="indoor_pos" namespace='$(env DRONE_DEVICE_ID)'>
-    <param name="home_lat" value="61.518111"/>
-    <param name="home_lon" value="23.691608"/>
-    <param name="home_alt" value="98.5"/>
+    <param name="home_lat" value="$(var lat)"/>
+    <param name="home_lon" value="$(var lon)"/>
+    <param name="home_alt" value="$(var alt)"/>
   </node>
 </launch>
 
