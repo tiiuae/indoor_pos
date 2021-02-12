@@ -32,10 +32,10 @@ public:
     int _lighthouse_count = 0;
     uint64_t _start_time = 0;
     int64_t _timesync_offset_us = 0;
+    double _north_offset = 0.0;
 
     rclcpp::Publisher<px4_msgs::msg::SensorGps>::SharedPtr _publisher;
     rclcpp::Subscription<px4_msgs::msg::Timesync>::SharedPtr  _timesync_sub;
-
 };
 
 IndoorPos::IndoorPos()
@@ -50,12 +50,14 @@ IndoorPos::IndoorPos()
     this->declare_parameter<double>("home_lon", 0.0);
     this->declare_parameter<double>("home_alt", 0.0);
     this->declare_parameter<int>("frequency", 10);
+    this->declare_parameter<double>("north_offset", 0.0);
 
     auto point = geographic_msgs::msg::GeoPoint();
     this->get_parameter("home_lat", point.latitude);
     this->get_parameter("home_lon", point.longitude);
     this->get_parameter("home_alt", point.altitude);
     this->get_parameter("frequency", _impl->_update_freq);
+    this->get_parameter("north_offset", _impl->_north_offset);
 
     RCLCPP_INFO(this->get_logger(), "Home coordinates: lat: %lf, lon: %lf, alt: %lf",
         point.latitude, point.longitude, point.altitude);
@@ -138,10 +140,16 @@ void IndoorPosPrivate::surviveSpin()
 void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose)
 {
     geodesy::UTMPoint utm = geodesy::UTMPoint(_home);
+    double x = pose.Pos[0];
+    double y = pose.Pos[1];
+    double z = pose.Pos[2];
 
-    utm.easting += pose.Pos[0];
-    utm.northing += pose.Pos[1];
-    utm.altitude += pose.Pos[2];
+    double rotated_x = x*cos(_north_offset) - y*sin(_north_offset);
+    double rotated_y = x*sin(_north_offset) + y*cos(_north_offset);
+
+    utm.easting  += rotated_x;
+    utm.northing += rotated_y;
+    utm.altitude += z;
 
     geographic_msgs::msg::GeoPoint point = toMsg(utm);
 
