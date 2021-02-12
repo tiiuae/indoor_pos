@@ -13,6 +13,10 @@ Convert indoor positioning data from lighthouse to PX4 positioning sensor data
 
 //#define INDOOR_USE_SIMULATOR
 
+const uint64_t MaxRttSample = 1000000;
+
+using std::placeholders::_1;
+
 class IndoorPosPrivate
 {
 public:
@@ -27,8 +31,10 @@ public:
     SurviveSimpleContext *_actx;
     int _lighthouse_count = 0;
     uint64_t _start_time = 0;
+    int64_t _timesync_offset_us = 0;
 
     rclcpp::Publisher<px4_msgs::msg::SensorGps>::SharedPtr _publisher;
+    rclcpp::Subscription<px4_msgs::msg::Timesync>::SharedPtr  _timesync_sub;
 
 };
 
@@ -64,6 +70,9 @@ IndoorPos::IndoorPos()
         _impl->_home.band
         );
 
+    _impl->_timesync_sub = this->create_subscription<px4_msgs::msg::Timesync>(
+        "Timesync_PubSubTopic", 10, std::bind(&IndoorPos::TimeSync, this, _1));
+
     _impl->_publisher = this->create_publisher<px4_msgs::msg::SensorGps>("SensorGps_PubSubTopic", 10);
 
     if (_impl->_update_freq > 0)
@@ -94,6 +103,24 @@ void IndoorPos::surviveSpinTimerCallback()
     _impl->surviveSpin();
 }
 
+void IndoorPos::TimeSync(const px4_msgs::msg::Timesync::SharedPtr msg) const
+{
+    if (msg->tc1 > 0) {
+        // Calculate time offset between this system and the remote system, assuming RTT for
+	    // the timesync packet is roughly equal both ways.
+		int64_t offset_us = (int64_t)((msg->ts1 / 1000ULL) + msg->timestamp - (msg->tc1 / 1000ULL) * 2) / 2 ;
+
+		// Calculate the round trip time (RTT) it took the timesync packet to bounce back to us from remote system
+		uint64_t rtt_us = msg->timestamp - (msg->ts1 / 1000ULL);
+
+		if (rtt_us < MaxRttSample) {	// Only use samples with low RTT
+            //RCLCPP_INFO(this->get_logger(), "TimeSync! %lu, tc1:%lu, ts1:%lu, offset_us:%ld, rtt_us:%lu => SYNC", msg->timestamp, msg->tc1, msg->ts1, offset_us, rtt_us);
+            _impl->_timesync_offset_us = offset_us;
+        }
+
+    }
+}
+
 void IndoorPosPrivate::surviveSpin()
 {
     if (survive_simple_wait_for_update(_actx) && rclcpp::ok()) {
@@ -117,7 +144,11 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose)
     utm.altitude += pose.Pos[2];
 
     geographic_msgs::msg::GeoPoint point = toMsg(utm);
-    uint64_t timecode = this->_node->now().nanoseconds() - _start_time;
+
+    timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    uint64_t timecode = static_cast<int64_t>(t.tv_sec * 1000000000LL + t.tv_nsec) / 1000LL;
+    timecode = timecode - (_timesync_offset_us / 1000);
 
 /*
     RCLCPP_INFO(this->_node->get_logger(), "[%lu] lat: %.15lf, lon: %.15lf, alt: %.15lf",

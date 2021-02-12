@@ -3,6 +3,7 @@
 
 #include <sys/types.h>
 #include <rclcpp/rclcpp.hpp>
+#include <px4_msgs/msg/timesync.hpp>
 
 class IndoorPosPrivate;
 
@@ -14,6 +15,7 @@ public:
 
 private:
     void surviveSpinTimerCallback();
+    void TimeSync(const px4_msgs::msg::Timesync::SharedPtr msg) const;
 
     std::unique_ptr<IndoorPosPrivate> _impl;
     rclcpp::TimerBase::SharedPtr _survive_spin_timer;
