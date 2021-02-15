@@ -11,6 +11,7 @@ Convert indoor positioning data from lighthouse to PX4 positioning sensor data
 #include <cmath>
 #include <px4_msgs/msg/sensor_gps.hpp>
 
+
 //#define INDOOR_USE_SIMULATOR
 
 const uint64_t MaxRttSample = 1000000;
@@ -20,10 +21,14 @@ using std::placeholders::_1;
 class IndoorPosPrivate
 {
 public:
+    enum IndoorNodeState {
+        Idle, ReqCalibrate, ReqRestart, Calibrating, Restarting, Error
+    };
 
-    void surviveInit();
+    int  surviveInit();
     void surviveSpin();
     void IndoorPosUpdate(SurvivePose pose);
+    int  restart();
 
     IndoorPos *_node;
     int _update_freq;
@@ -34,8 +39,11 @@ public:
     int64_t _timesync_offset_us = 0;
     double _north_offset = 0.0;
 
+    IndoorNodeState _node_state = IndoorNodeState::Idle;
+
     rclcpp::Publisher<px4_msgs::msg::SensorGps>::SharedPtr _publisher;
     rclcpp::Subscription<px4_msgs::msg::Timesync>::SharedPtr  _timesync_sub;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr  _control_sub;
 };
 
 IndoorPos::IndoorPos()
@@ -74,7 +82,8 @@ IndoorPos::IndoorPos()
 
     _impl->_timesync_sub = this->create_subscription<px4_msgs::msg::Timesync>(
         "Timesync_PubSubTopic", 10, std::bind(&IndoorPos::TimeSync, this, _1));
-
+    _impl->_control_sub = this->create_subscription<std_msgs::msg::String>(
+        "IndoorPos_ctrl", 10, std::bind(&IndoorPos::Control, this, _1));
     _impl->_publisher = this->create_publisher<px4_msgs::msg::SensorGps>("SensorGps_PubSubTopic", 10);
 
     if (_impl->_update_freq > 0)
@@ -83,7 +92,10 @@ IndoorPos::IndoorPos()
         if (timer_ms == 0)
             timer_ms = 1;
 
-        _impl->surviveInit();
+        if (_impl->surviveInit() < 0) {
+            RCLCPP_ERROR(this->get_logger(), "ERROR: Survive Init failed!");
+            exit(EXIT_FAILURE);
+        }
         _survive_spin_timer = this->create_wall_timer(
             std::chrono::milliseconds(timer_ms),
             std::bind(&IndoorPos::surviveSpinTimerCallback, this));
@@ -123,17 +135,64 @@ void IndoorPos::TimeSync(const px4_msgs::msg::Timesync::SharedPtr msg) const
     }
 }
 
+void IndoorPos::Control(const std_msgs::msg::String::SharedPtr msg) const
+{
+    RCLCPP_INFO(this->get_logger(), "Request command: '%s'", msg->data.c_str());
+    if (strcmp(msg->data.c_str(), "calibrate") == 0) {
+        if (_impl->_node_state == IndoorPosPrivate::IndoorNodeState::Idle) {
+            RCLCPP_INFO(this->get_logger(), "Request Calibration");
+            _impl->_node_state = IndoorPosPrivate::IndoorNodeState::ReqCalibrate;
+        } else {
+            RCLCPP_WARN(this->get_logger(), "Calibrate request not allowed");
+        }
+    }
+    else if (strcmp(msg->data.c_str(), "restart") == 0) {
+        if (_impl->_node_state == IndoorPosPrivate::IndoorNodeState::Idle) {
+            RCLCPP_INFO(this->get_logger(), "Request Restart");
+            _impl->_node_state = IndoorPosPrivate::IndoorNodeState::ReqRestart;
+        } else {
+            RCLCPP_WARN(this->get_logger(), "Restart request not allowed");
+        }
+    }
+    else {
+        RCLCPP_INFO(this->get_logger(), "Unknown command: '%s'", msg->data.c_str());
+    }
+}
+
+int IndoorPosPrivate::restart()
+{
+    RCLCPP_INFO(this->_node->get_logger(), "Restart survive");
+    survive_simple_close(_actx);
+    return surviveInit();
+}
+
 void IndoorPosPrivate::surviveSpin()
 {
-    if (survive_simple_wait_for_update(_actx) && rclcpp::ok()) {
-        for (const SurviveSimpleObject *it = survive_simple_get_next_updated(_actx); it != 0;
-            it = survive_simple_get_next_updated(_actx))
-        {
-            SurvivePose pose;
-            survive_simple_object_get_latest_pose(it, &pose);
-            IndoorPosUpdate(pose);
-        }
+    if (_node_state == IndoorNodeState::Idle) {
+        if (survive_simple_wait_for_update(_actx) && rclcpp::ok()) {
+            for (const SurviveSimpleObject *it = survive_simple_get_next_updated(_actx); it != 0;
+                it = survive_simple_get_next_updated(_actx))
+            {
+                SurvivePose pose;
+                survive_simple_object_get_latest_pose(it, &pose);
+                IndoorPosUpdate(pose);
+            }
 
+        }
+    } else if (_node_state == IndoorNodeState::ReqCalibrate) {
+        RCLCPP_INFO(this->_node->get_logger(), "Start calibrate sequence");
+        _node_state = IndoorNodeState::Calibrating;
+        if (restart() < 0) {
+            _node_state = IndoorNodeState::Error;
+            RCLCPP_ERROR(this->_node->get_logger(), "Calibrate error!");
+        }
+    } else if (_node_state == IndoorNodeState::ReqRestart) {
+        RCLCPP_INFO(this->_node->get_logger(), "Start restart sequence");
+        _node_state = IndoorNodeState::Restarting;
+        if (restart() < 0) {
+            _node_state = IndoorNodeState::Error;
+            RCLCPP_ERROR(this->_node->get_logger(), "Initialization error!");
+        }
     }
 }
 
@@ -191,35 +250,42 @@ void log_fn(SurviveSimpleContext *actx, SurviveLogLevel logLevel, const char *ms
     actx=actx;
     logLevel=logLevel;
     fprintf(stderr, "SimpleApi: %s\n", msg);
-    
 }
 
-void IndoorPosPrivate::surviveInit()
+int IndoorPosPrivate::surviveInit()
 {
     RCLCPP_INFO(this->_node->get_logger(), "surviveInit");
+    std::vector<const char*> argstring;
 
 #ifdef INDOOR_USE_SIMULATOR
-    const char* argstring[] = {"--v", "10", "--simulator"};
-    const int argc = 3;
-#else
-    //const char* argstring[] = {"-l", "4", "--lighthouse-gen", "2"};
-    //const int argc = 4;
-
-    const char** argstring = nullptr;
-    const int argc = 0;
+    RCLCPP_INFO(this->_node->get_logger(), "Use Simulator");
+    //const char* argstring[] = {"--v", "100", "--simulator"};
+    //const int argc = 3;
+    argstring.push_back("--v");
+    argstring.push_back("10");
+    argstring.push_back("--simulator");
 #endif
 
-    char* const* argv = (char* const*) argstring;
+    if (_node_state == IndoorNodeState::Calibrating) {
+        argstring.push_back("--center-on-lh0");
+        argstring.push_back("0");
+        argstring.push_back("--force-calibrate");
+    }
+
+    const int argc = argstring.size();
+    char* const* argv = (char* const*) argstring.data();
     _actx = survive_simple_init_with_logger(argc, argv, log_fn);
 
     if (_actx == 0) {
         // implies -help or similiar
         RCLCPP_WARN(this->_node->get_logger(), "WARNING: survive not initialized.");
-        return;
+        return -1;
     }
 
     survive_simple_start_thread(_actx);
+    _node_state = IndoorNodeState::Idle;
 
+    _lighthouse_count = 0;
     for (const SurviveSimpleObject *it = survive_simple_get_first_object(_actx); it != 0;
         it = survive_simple_get_next_object(_actx, it))
     {
@@ -230,6 +296,8 @@ void IndoorPosPrivate::surviveInit()
         }
 	}
     RCLCPP_INFO(this->_node->get_logger(), "Lighthouse count: %d", _lighthouse_count);
+
+    return 0;
 }
 
 int main(int argc, char * argv[])

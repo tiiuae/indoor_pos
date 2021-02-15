@@ -22,7 +22,7 @@ find_package(geodesy REQUIRED)
 find_package(px4_msgs REQUIRED)
 
 add_executable(indoor_pos src/indoor_pos.cpp)
-ament_target_dependencies(indoor_pos rclcpp geodesy px4_msgs)
+ament_target_dependencies(indoor_pos rclcpp geodesy px4_msgs std_msgs)
 
 target_link_libraries(indoor_pos
     survive)

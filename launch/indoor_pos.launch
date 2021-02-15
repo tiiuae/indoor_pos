@@ -3,9 +3,13 @@
   lat   : Home latitude
   lon   : Home longitude
   alt   : Home altitude
-
   freq  : Update frequency of the PX4_msgs SensorGps message
-  n_off : Offset angle from geographical north to the vivo tracker calibrated y-axis
+  n_off : Offset angle (radians) from geographical north to the vivo tracker calibrated y-axis.
+          if drone is located directly south from ref lighthouse during calibration,
+          the n_off shall be 0.0. If drone is west from lh, the n_off shall be 1.570795 (90deg)
+
+  example usage:
+  ros2 launch indoor_pos indoor_pos.launch lat:=60.000 lon:=31.000 alt:=50.0 n_off:=1.570796
 -->
 
 <launch>
