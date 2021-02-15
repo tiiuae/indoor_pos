@@ -3,6 +3,7 @@
 
 #include <sys/types.h>
 #include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/string.hpp>
 
 class IndoorPosPrivate;
 
@@ -14,6 +15,7 @@ public:
 
 private:
     void surviveSpinTimerCallback();
+    void Control(const std_msgs::msg::String::SharedPtr msg) const;
 
     std::unique_ptr<IndoorPosPrivate> _impl;
     rclcpp::TimerBase::SharedPtr _survive_spin_timer;
