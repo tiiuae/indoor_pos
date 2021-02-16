@@ -3,6 +3,7 @@
 
 #include <sys/types.h>
 #include <rclcpp/rclcpp.hpp>
+#include <px4_msgs/msg/sensor_mag.hpp>
 #include <std_msgs/msg/string.hpp>
 
 class IndoorPosPrivate;
@@ -15,6 +16,7 @@ public:
 
 private:
     void surviveSpinTimerCallback();
+    void SensorMag(const px4_msgs::msg::SensorMag::SharedPtr msg) const;
     void Control(const std_msgs::msg::String::SharedPtr msg) const;
 
     std::unique_ptr<IndoorPosPrivate> _impl;
