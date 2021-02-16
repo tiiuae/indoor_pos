@@ -7,7 +7,7 @@
   n_off : Offset angle (degrees) from geographical north to the vivo tracker calibrated y-axis.
           if drone is located directly south from ref lighthouse during calibration,
           the n_off shall be 0.0. If drone is west from lh, the n_off shall be 90.0
-
+  decl  : Magnetic declination in the home global coordinates.
   example usage:
   ros2 launch indoor_pos indoor_pos.launch lat:=60.000 lon:=31.000 alt:=50.0 n_off:=1.570796
 -->
@@ -18,6 +18,7 @@
   <arg name="alt" default="110.0"/>
   <arg name="freq" default="10"/>
   <arg name="n_off" default="0.0"/>
+  <arg name="decl" default="0.0"/>
 
   <node name="indoor_pos" pkg="indoor_pos" exec="indoor_pos" namespace='$(env DRONE_DEVICE_ID)'>
     <param name="home_lat" value="$(var lat)"/>
@@ -25,6 +26,7 @@
     <param name="home_alt" value="$(var alt)"/>
     <param name="frequency" value="$(var freq)"/>
     <param name="north_offset" value="$(var n_off)"/>
+    <param name="declination" value="$(var decl)"/>
   </node>
 </launch>
 

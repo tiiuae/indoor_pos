@@ -16,6 +16,7 @@ Convert indoor positioning data from lighthouse to PX4 positioning sensor data
 
 const double Pi = 3.141592654;
 const uint64_t MaxRttSample = 1000000;
+const uint8_t MagSensorAvgSampleCount = 12;
 
 using std::placeholders::_1;
 
@@ -30,6 +31,7 @@ public:
     void surviveSpin();
     void IndoorPosUpdate(SurvivePose pose);
     int  restart();
+    void calcAngle(double rad_a);
 
     IndoorPos *_node;
     int _update_freq;
@@ -39,12 +41,19 @@ public:
     uint64_t _start_time = 0;
     int64_t _timesync_offset_us = 0;
     double _north_offset = 0.0;
+    double _declination = 0.0;
+
+    double _angles[MagSensorAvgSampleCount];
+    int _angles_idx = 0;
+    int _last_angle = 0;
+    bool _valid_angle = false;
 
     IndoorNodeState _node_state = IndoorNodeState::Idle;
 
     rclcpp::Publisher<px4_msgs::msg::SensorGps>::SharedPtr _publisher;
     rclcpp::Subscription<px4_msgs::msg::Timesync>::SharedPtr  _timesync_sub;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr  _control_sub;
+    rclcpp::Subscription<px4_msgs::msg::SensorMag>::SharedPtr  _sensorMag_sub;
 };
 
 IndoorPos::IndoorPos()
@@ -60,6 +69,7 @@ IndoorPos::IndoorPos()
     this->declare_parameter<double>("home_alt", 0.0);
     this->declare_parameter<int>("frequency", 10);
     this->declare_parameter<double>("north_offset", 0.0);
+    this->declare_parameter<double>("declination", 0.0);
 
     double n_off = 0.0;
     auto point = geographic_msgs::msg::GeoPoint();
@@ -68,6 +78,7 @@ IndoorPos::IndoorPos()
     this->get_parameter("home_alt", point.altitude);
     this->get_parameter("frequency", _impl->_update_freq);
     this->get_parameter("north_offset", n_off);
+    this->get_parameter("declination", _impl->_declination);
     _impl->_north_offset = (n_off / 360.0) * 2 * Pi;
 
     RCLCPP_INFO(this->get_logger(), "Home coordinates: lat: %lf, lon: %lf, alt: %lf",
@@ -82,13 +93,21 @@ IndoorPos::IndoorPos()
         _impl->_home.zone,
         _impl->_home.band
         );
-    RCLCPP_INFO(this->get_logger(), "Update freq: %d Hz, north_offset: %.3lf deg (%lf rad)",
-        _impl->_update_freq, n_off, _impl->_north_offset);
+    RCLCPP_INFO(this->get_logger(), "Update freq: %d Hz, north_offset: %.3lf deg (%lf rad), declination: %.3lf",
+        _impl->_update_freq, n_off, _impl->_north_offset, _impl->_declination);
+
+    for (int i=0; i<MagSensorAvgSampleCount; i++) {
+        _impl->_angles[i] = 0.0;
+    }
+    _impl->_angles_idx = 0;
 
     _impl->_timesync_sub = this->create_subscription<px4_msgs::msg::Timesync>(
         "Timesync_PubSubTopic", 10, std::bind(&IndoorPos::TimeSync, this, _1));
     _impl->_control_sub = this->create_subscription<std_msgs::msg::String>(
         "IndoorPos_ctrl", 10, std::bind(&IndoorPos::Control, this, _1));
+    _impl->_sensorMag_sub = this->create_subscription<px4_msgs::msg::SensorMag>(
+        "SensorMag_PubSubTopic", 10, std::bind(&IndoorPos::SensorMag, this, _1));
+
     _impl->_publisher = this->create_publisher<px4_msgs::msg::SensorGps>("SensorGps_PubSubTopic", 10);
 
     if (_impl->_update_freq > 0)
@@ -120,6 +139,12 @@ IndoorPos::~IndoorPos()
 void IndoorPos::surviveSpinTimerCallback()
 {
     _impl->surviveSpin();
+}
+
+void IndoorPos::SensorMag(const px4_msgs::msg::SensorMag::SharedPtr msg) const
+{
+    double rad_a = -atan2(msg->y, msg->x);
+    _impl->calcAngle(rad_a);
 }
 
 void IndoorPos::TimeSync(const px4_msgs::msg::Timesync::SharedPtr msg) const
@@ -162,6 +187,39 @@ void IndoorPos::Control(const std_msgs::msg::String::SharedPtr msg) const
     else {
         RCLCPP_INFO(this->get_logger(), "Unknown command: '%s'", msg->data.c_str());
     }
+}
+
+void IndoorPosPrivate::calcAngle(double rad_a)
+{
+    double pi = 3.141592654;
+    if (rad_a <= 0)
+        rad_a += 2*pi;
+    double angle = rad_a/(2*pi) * 360.0 - _declination;
+    if (angle <= 0)
+        angle += 360.0;
+    else if (angle > 360.0)
+        angle -= 360.0;
+
+    _angles[_angles_idx] = angle;
+    if (++_angles_idx >= MagSensorAvgSampleCount) {
+        _angles_idx = 0;
+        _valid_angle = true;
+    }
+
+    double max_val = _angles[0];
+    for (int i=0; i<MagSensorAvgSampleCount; i++)
+        if(max_val < _angles[i])
+            max_val = _angles[i];
+
+    angle = 0.0;
+    for (int i=0; i<MagSensorAvgSampleCount; i++) {
+        angle += _angles[i];
+        if (max_val - _angles[i] > 180.0)
+            angle += 360.0;
+    }
+    angle /= MagSensorAvgSampleCount;
+    if (angle > 360.0) angle -= 360.0;
+    _last_angle = (int) angle;
 }
 
 int IndoorPosPrivate::restart()
