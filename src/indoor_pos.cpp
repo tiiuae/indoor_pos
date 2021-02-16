@@ -14,6 +14,10 @@ Convert indoor positioning data from lighthouse to PX4 positioning sensor data
 
 //#define INDOOR_USE_SIMULATOR
 
+const double Pi = 3.141592654;
+
+using std::placeholders::_1;
+
 class IndoorPosPrivate
 {
 public:
@@ -53,12 +57,14 @@ IndoorPos::IndoorPos()
     this->declare_parameter<int>("frequency", 10);
     this->declare_parameter<double>("north_offset", 0.0);
 
+    double n_off = 0.0;
     auto point = geographic_msgs::msg::GeoPoint();
     this->get_parameter("home_lat", point.latitude);
     this->get_parameter("home_lon", point.longitude);
     this->get_parameter("home_alt", point.altitude);
     this->get_parameter("frequency", _impl->_update_freq);
-    this->get_parameter("north_offset", _impl->_north_offset);
+    this->get_parameter("north_offset", n_off);
+    _impl->_north_offset = (n_off / 360.0) * 2 * Pi;
 
     RCLCPP_INFO(this->get_logger(), "Home coordinates: lat: %lf, lon: %lf, alt: %lf",
         point.latitude, point.longitude, point.altitude);
@@ -72,6 +78,8 @@ IndoorPos::IndoorPos()
         _impl->_home.zone,
         _impl->_home.band
         );
+    RCLCPP_INFO(this->get_logger(), "Update freq: %d Hz, north_offset: %.3lf deg (%lf rad)",
+        _impl->_update_freq, n_off, _impl->_north_offset);
 
     _impl->_control_sub = this->create_subscription<std_msgs::msg::String>(
         "IndoorPos_ctrl", 10, std::bind(&IndoorPos::Control, this, _1));
