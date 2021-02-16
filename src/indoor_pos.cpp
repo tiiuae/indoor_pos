@@ -42,10 +42,11 @@ public:
     int64_t _timesync_offset_us = 0;
     double _north_offset = 0.0;
     double _declination = 0.0;
+    int _use_mag = 0;
 
     double _angles[MagSensorAvgSampleCount];
     int _angles_idx = 0;
-    int _last_angle = 0;
+    double _last_angle = 0.0;
     bool _valid_angle = false;
 
     IndoorNodeState _node_state = IndoorNodeState::Idle;
@@ -70,6 +71,7 @@ IndoorPos::IndoorPos()
     this->declare_parameter<int>("frequency", 10);
     this->declare_parameter<double>("north_offset", 0.0);
     this->declare_parameter<double>("declination", 0.0);
+    this->declare_parameter<int>("use_mag", 0);
 
     double n_off = 0.0;
     auto point = geographic_msgs::msg::GeoPoint();
@@ -79,6 +81,9 @@ IndoorPos::IndoorPos()
     this->get_parameter("frequency", _impl->_update_freq);
     this->get_parameter("north_offset", n_off);
     this->get_parameter("declination", _impl->_declination);
+    this->get_parameter("use_mag", _impl->_use_mag);
+    if (_impl->_use_mag != 0)
+        n_off = 0;
     _impl->_north_offset = (n_off / 360.0) * 2 * Pi;
 
     RCLCPP_INFO(this->get_logger(), "Home coordinates: lat: %lf, lon: %lf, alt: %lf",
@@ -93,8 +98,9 @@ IndoorPos::IndoorPos()
         _impl->_home.zone,
         _impl->_home.band
         );
-    RCLCPP_INFO(this->get_logger(), "Update freq: %d Hz, north_offset: %.3lf deg (%lf rad), declination: %.3lf",
-        _impl->_update_freq, n_off, _impl->_north_offset, _impl->_declination);
+
+    RCLCPP_INFO(this->get_logger(), "Update freq: %d Hz, north_offset: %.3lf deg (%lf rad), declination: %.3lf, use_mag: %d",
+        _impl->_update_freq, n_off, _impl->_north_offset, _impl->_declination, _impl->_use_mag);
 
     for (int i=0; i<MagSensorAvgSampleCount; i++) {
         _impl->_angles[i] = 0.0;
@@ -156,7 +162,6 @@ void IndoorPos::TimeSync(const px4_msgs::msg::Timesync::SharedPtr msg) const
 
 		// Calculate the round trip time (RTT) it took the timesync packet to bounce back to us from remote system
 		uint64_t rtt_us = msg->timestamp - (msg->ts1 / 1000ULL);
-
 		if (rtt_us < MaxRttSample) {	// Only use samples with low RTT
             //RCLCPP_INFO(this->get_logger(), "TimeSync! %lu, tc1:%lu, ts1:%lu, offset_us:%ld, rtt_us:%lu => SYNC", msg->timestamp, msg->tc1, msg->ts1, offset_us, rtt_us);
             _impl->_timesync_offset_us = offset_us;
@@ -189,18 +194,13 @@ void IndoorPos::Control(const std_msgs::msg::String::SharedPtr msg) const
     }
 }
 
+
 void IndoorPosPrivate::calcAngle(double rad_a)
 {
-    double pi = 3.141592654;
     if (rad_a <= 0)
-        rad_a += 2*pi;
-    double angle = rad_a/(2*pi) * 360.0 - _declination;
-    if (angle <= 0)
-        angle += 360.0;
-    else if (angle > 360.0)
-        angle -= 360.0;
+        rad_a += 2*Pi;
 
-    _angles[_angles_idx] = angle;
+    _angles[_angles_idx] = rad_a;
     if (++_angles_idx >= MagSensorAvgSampleCount) {
         _angles_idx = 0;
         _valid_angle = true;
@@ -211,15 +211,21 @@ void IndoorPosPrivate::calcAngle(double rad_a)
         if(max_val < _angles[i])
             max_val = _angles[i];
 
-    angle = 0.0;
+    double angle = 0.0;
     for (int i=0; i<MagSensorAvgSampleCount; i++) {
         angle += _angles[i];
-        if (max_val - _angles[i] > 180.0)
+        if (max_val - _angles[i] > Pi)
             angle += 360.0;
     }
     angle /= MagSensorAvgSampleCount;
-    if (angle > 360.0) angle -= 360.0;
-    _last_angle = (int) angle;
+    if (angle > 2*Pi) angle -= 2*Pi;
+    _last_angle = angle;
+
+/*
+    double deg = (angle / (2*Pi)) * 360.0;
+    RCLCPP_INFO(this->_node->get_logger(), "SensorMag: angle %.15lf (%lf), noff:%lf",
+        deg, angle, _north_offset);
+*/
 }
 
 int IndoorPosPrivate::restart()
@@ -243,12 +249,13 @@ void IndoorPosPrivate::surviveSpin()
 
         }
     } else if (_node_state == IndoorNodeState::ReqCalibrate) {
-        RCLCPP_INFO(this->_node->get_logger(), "Start calibrate sequence");
+        RCLCPP_INFO(this->_node->get_logger(), "Start calibrate sequence..");
         _node_state = IndoorNodeState::Calibrating;
         if (restart() < 0) {
             _node_state = IndoorNodeState::Error;
             RCLCPP_ERROR(this->_node->get_logger(), "Calibrate error!");
         }
+        RCLCPP_INFO(this->_node->get_logger(), ".. calibrate sequence done.");
     } else if (_node_state == IndoorNodeState::ReqRestart) {
         RCLCPP_INFO(this->_node->get_logger(), "Start restart sequence");
         _node_state = IndoorNodeState::Restarting;
@@ -256,6 +263,7 @@ void IndoorPosPrivate::surviveSpin()
             _node_state = IndoorNodeState::Error;
             RCLCPP_ERROR(this->_node->get_logger(), "Initialization error!");
         }
+        RCLCPP_INFO(this->_node->get_logger(), ".. restart sequence done.");
     }
 }
 
@@ -330,6 +338,9 @@ int IndoorPosPrivate::surviveInit()
 #endif
 
     if (_node_state == IndoorNodeState::Calibrating) {
+        if (_use_mag && _valid_angle) {
+            _north_offset = _last_angle;
+        }
         argstring.push_back("--center-on-lh0");
         argstring.push_back("0");
         argstring.push_back("--force-calibrate");
