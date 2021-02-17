@@ -41,6 +41,7 @@ public:
     double _north_offset = 0.0;
     double _declination = 0.0;
     int _use_mag = 0;
+    uint64_t _last_timestamp = 0;
 
     double _angles[MagSensorAvgSampleCount];
     int _angles_idx = 0;
@@ -144,6 +145,7 @@ void IndoorPos::surviveSpinTimerCallback()
 
 void IndoorPos::SensorMag(const px4_msgs::msg::SensorMag::SharedPtr msg) const
 {
+    _impl->_last_timestamp = msg->timestamp;
     double rad_a = -atan2(msg->y, msg->x);
     _impl->calcAngle(rad_a);
 }
@@ -260,7 +262,7 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose)
     utm.altitude += z;
 
     geographic_msgs::msg::GeoPoint point = toMsg(utm);
-    uint64_t timecode = this->_node->now().nanoseconds() - _start_time;
+    uint64_t timecode = _last_timestamp;
 
 /*
     RCLCPP_INFO(this->_node->get_logger(), "[%lu] lat: %.15lf, lon: %.15lf, alt: %.15lf",
