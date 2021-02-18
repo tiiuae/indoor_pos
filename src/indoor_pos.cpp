@@ -10,7 +10,8 @@ Convert indoor positioning data from lighthouse to PX4 positioning sensor data
 #include "libsurvive/survive_api.h"
 #include <cmath>
 #include <px4_msgs/msg/sensor_gps.hpp>
-
+#include <thread>
+#include <chrono>
 
 //#define INDOOR_USE_SIMULATOR
 
@@ -114,22 +115,21 @@ IndoorPos::IndoorPos()
 
     if (_impl->_update_freq > 0)
     {
-        int timer_ms = 1000 / _impl->_update_freq;
-        if (timer_ms == 0)
-            timer_ms = 1;
+        _spin_timer_ms = 1000 / _impl->_update_freq;
+        if (_spin_timer_ms == 0)
+            _spin_timer_ms = 1;
 
         if (_impl->surviveInit() < 0) {
             RCLCPP_ERROR(this->get_logger(), "ERROR: Survive Init failed!");
             exit(EXIT_FAILURE);
         }
-        _survive_spin_timer = this->create_wall_timer(
-            std::chrono::milliseconds(timer_ms),
-            std::bind(&IndoorPos::surviveSpinTimerCallback, this));
 
     } else {
         RCLCPP_ERROR(this->get_logger(), "ERROR: update frequency must be > 0");
         exit(EXIT_FAILURE);
     }
+
+    _initialized = true;
 }
 
 IndoorPos::~IndoorPos()
@@ -138,9 +138,25 @@ IndoorPos::~IndoorPos()
     survive_simple_close(_impl->_actx);
 }
 
+/* Worker method is running in separate thread */
+void IndoorPos::Worker()
+{
+    RCLCPP_INFO(this->get_logger(), "[Worker] Wait for node initialization");
+    while (! _initialized && rclcpp::ok()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(_spin_timer_ms));
+    }
+
+    RCLCPP_INFO(this->get_logger(), "[Worker] Initialization done.");
+    while (rclcpp::ok()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(_spin_timer_ms));
+        _impl->surviveSpin();
+    }
+    RCLCPP_INFO(this->get_logger(), "[Worker] Exit.");
+}
+
 void IndoorPos::surviveSpinTimerCallback()
 {
-    _impl->surviveSpin();
+    _que.push(1);
 }
 
 void IndoorPos::SensorMag(const px4_msgs::msg::SensorMag::SharedPtr msg) const
@@ -350,11 +366,18 @@ int IndoorPosPrivate::surviveInit()
     return 0;
 }
 
+void indoor_pos_worker(std::shared_ptr<IndoorPos> node)
+{
+    node->Worker();
+}
+
 int main(int argc, char * argv[])
 {
     rclcpp::init(argc, argv);
     std::shared_ptr<IndoorPos> node = std::make_shared<IndoorPos>();
+    std::thread w_thread(indoor_pos_worker, node);
     rclcpp::spin(node);
+    w_thread.join();
     rclcpp::shutdown();
     return 0;
 }
