@@ -333,10 +333,10 @@ int IndoorPosPrivate::surviveInit()
         if (_use_mag && _valid_angle) {
             _north_offset = _last_angle;
         }
-        argstring.push_back("--center-on-lh0");
-        argstring.push_back("0");
         argstring.push_back("--force-calibrate");
     }
+    argstring.push_back("--center-on-lh0");
+    argstring.push_back("1");
 
     const int argc = argstring.size();
     char* const* argv = (char* const*) argstring.data();
