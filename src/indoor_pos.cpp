@@ -29,7 +29,7 @@ public:
 
     int  surviveInit();
     void surviveSpin();
-    void IndoorPosUpdate(SurvivePose pose);
+    void IndoorPosUpdate(SurvivePose pose, SurviveVelocity velocity);
     int  restart();
     void calcAngle(double rad_a);
 
@@ -238,9 +238,11 @@ void IndoorPosPrivate::surviveSpin()
             for (const SurviveSimpleObject *it = survive_simple_get_next_updated(_actx); it != 0;
                 it = survive_simple_get_next_updated(_actx))
             {
-                SurvivePose pose;
+                SurvivePose     pose;
+                SurviveVelocity velocity;
                 survive_simple_object_get_latest_pose(it, &pose);
-                IndoorPosUpdate(pose);
+                survive_simple_object_get_latest_velocity(it, &velocity);
+                IndoorPosUpdate(pose, velocity);
             }
 
         }
@@ -263,8 +265,9 @@ void IndoorPosPrivate::surviveSpin()
     }
 }
 
-void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose)
+void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose, SurviveVelocity velocity)
 {
+    // Position
     geodesy::UTMPoint utm = geodesy::UTMPoint(_home);
     double x = pose.Pos[0];
     double y = pose.Pos[1];
@@ -278,6 +281,15 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose)
     utm.altitude += z;
 
     geographic_msgs::msg::GeoPoint point = toMsg(utm);
+
+    // Velocity
+    double vx = velocity.Pos[0];
+    double vy = velocity.Pos[1];
+    double vz = velocity.Pos[2];
+
+    double rotated_vx = vx*cos(_north_offset) - vy*sin(_north_offset);
+    double rotated_vy = vx*sin(_north_offset) + vy*cos(_north_offset);
+
     uint64_t timecode = _last_timestamp;
 
 /*
@@ -297,9 +309,11 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose)
     sensor_gps.hdop = 0.0f;
     sensor_gps.vdop = 0.0f;
 
-    sensor_gps.vel_n_m_s = 0.0f;
-    sensor_gps.vel_e_m_s = 0.0f;
-    sensor_gps.vel_d_m_s = 0.0f;
+    sensor_gps.vel_m_s = sqrt(rotated_vx * rotated_vx + rotated_vy * rotated_vy);
+    sensor_gps.vel_n_m_s = rotated_vx;
+    sensor_gps.vel_e_m_s = rotated_vy;
+    sensor_gps.vel_d_m_s = -vz;
+    sensor_gps.cog_rad = atan2(rotated_vy, rotated_vx);
     sensor_gps.vel_ned_valid = 1;
 
     sensor_gps.satellites_used = 16; //_lighthouse_count;
