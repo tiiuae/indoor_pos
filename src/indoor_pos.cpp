@@ -17,6 +17,7 @@ Convert indoor positioning data from lighthouse to PX4 positioning sensor data
 
 const double Pi = 3.141592654;
 const uint8_t MagSensorAvgSampleCount = 12;
+const int64_t PosInfoTimeOffset_us = -200000;
 
 using std::placeholders::_1;
 
@@ -285,7 +286,7 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose)
         timecode, point.latitude, point.longitude, point.altitude);
 */
     px4_msgs::msg::SensorGps sensor_gps;
-    sensor_gps.timestamp = timecode;
+    sensor_gps.timestamp = timecode + PosInfoTimeOffset_us;
     sensor_gps.lat = (uint32_t) (point.latitude  * 10000000);
     sensor_gps.lon = (uint32_t) (point.longitude * 10000000);
     sensor_gps.alt = (uint32_t) (point.altitude  * 1000);
