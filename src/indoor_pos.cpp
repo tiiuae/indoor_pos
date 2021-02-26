@@ -29,9 +29,10 @@ public:
 
     int  surviveInit();
     void surviveSpin();
-    void IndoorPosUpdate(SurvivePose pose);
+    void IndoorPosUpdate(uint64_t survive_ts_us, SurvivePose pose);
     int  restart();
     void calcAngle(double rad_a);
+    int64_t getSystemTimeUSec();
 
     IndoorPos *_node;
     int _update_freq;
@@ -239,8 +240,8 @@ void IndoorPosPrivate::surviveSpin()
                 it = survive_simple_get_next_updated(_actx))
             {
                 SurvivePose pose;
-                survive_simple_object_get_latest_pose(it, &pose);
-                IndoorPosUpdate(pose);
+                double timecode = survive_simple_object_get_latest_pose(it, &pose);
+                IndoorPosUpdate((uint64_t)timecode*1000000ULL, pose);
             }
 
         }
@@ -263,7 +264,7 @@ void IndoorPosPrivate::surviveSpin()
     }
 }
 
-void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose)
+void IndoorPosPrivate::IndoorPosUpdate(uint64_t survive_ts_us, SurvivePose pose)
 {
     geodesy::UTMPoint utm = geodesy::UTMPoint(_home);
     double x = pose.Pos[0];
@@ -278,7 +279,8 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose)
     utm.altitude += z;
 
     geographic_msgs::msg::GeoPoint point = toMsg(utm);
-    uint64_t timecode = _last_timestamp;
+    int64_t diff = getSystemTimeUSec() - (int64_t)(survive_ts_us);
+    uint64_t timecode = _last_timestamp - diff;
 
 /*
     RCLCPP_INFO(this->_node->get_logger(), "[%lu] lat: %.15lf, lon: %.15lf, alt: %.15lf",
@@ -307,6 +309,12 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose)
     sensor_gps.heading_offset = 0.0f;
 
     _publisher->publish(sensor_gps);
+}
+
+int64_t IndoorPosPrivate::getSystemTimeUSec() {
+    timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return static_cast<int64_t>(t.tv_sec * 1000000000LL + t.tv_nsec) / 1000LL;
 }
 
 void log_fn(SurviveSimpleContext *actx, SurviveLogLevel logLevel, const char *msg) {
