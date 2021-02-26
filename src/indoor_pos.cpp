@@ -32,13 +32,14 @@ public:
     void IndoorPosUpdate(SurvivePose pose, SurviveVelocity velocity);
     int  restart();
     void calcAngle(double rad_a);
+    int64_t getSystemTimeUSec();
 
     IndoorPos *_node;
     int _update_freq;
     geodesy::UTMPoint _home;
     SurviveSimpleContext *_actx;
     int _lighthouse_count = 0;
-    uint64_t _start_time = 0;
+    int64_t _msg_ts_diff = 0;
     double _north_offset = 0.0;
     double _declination = 0.0;
     int _use_mag = 0;
@@ -62,7 +63,6 @@ IndoorPos::IndoorPos()
 {
     RCLCPP_INFO(this->get_logger(), "Indoor positioning");
     _impl->_node = this;
-    _impl->_start_time = this->now().nanoseconds();
 
     this->declare_parameter<double>("home_lat", 0.0);
     this->declare_parameter<double>("home_lon", 0.0);
@@ -161,7 +161,13 @@ void IndoorPos::surviveSpinTimerCallback()
 
 void IndoorPos::SensorMag(const px4_msgs::msg::SensorMag::SharedPtr msg) const
 {
+    uint64_t curr_stamp = _impl->getSystemTimeUSec();
     _impl->_last_timestamp = msg->timestamp;
+    int64_t diff = (int64_t) curr_stamp - (int64_t) _impl->_last_timestamp;
+    if (_impl->_msg_ts_diff == 0 || _impl->_msg_ts_diff > diff)
+    {
+        _impl->_msg_ts_diff = diff;
+    }
     double rad_a = -atan2(msg->y, msg->x);
     _impl->calcAngle(rad_a);
 }
@@ -290,7 +296,7 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose, SurviveVelocity velocit
     double rotated_vx = vx*cos(_north_offset) - vy*sin(_north_offset);
     double rotated_vy = vx*sin(_north_offset) + vy*cos(_north_offset);
 
-    uint64_t timecode = _last_timestamp;
+    uint64_t timecode = getSystemTimeUSec() - _msg_ts_diff;
 
 /*
     RCLCPP_INFO(this->_node->get_logger(), "[%lu] lat: %.15lf, lon: %.15lf, alt: %.15lf",
@@ -321,6 +327,12 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose, SurviveVelocity velocit
     sensor_gps.heading_offset = 0.0f;
 
     _publisher->publish(sensor_gps);
+}
+
+int64_t IndoorPosPrivate::getSystemTimeUSec() {
+    timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return static_cast<int64_t>(t.tv_sec * 1000000000LL + t.tv_nsec) / 1000LL;
 }
 
 void log_fn(SurviveSimpleContext *actx, SurviveLogLevel logLevel, const char *msg) {
