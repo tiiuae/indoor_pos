@@ -316,10 +316,10 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose, SurviveVelocity velocit
     sensor_gps.vdop = 0.0f;
 
     sensor_gps.vel_m_s = sqrt(rotated_vx * rotated_vx + rotated_vy * rotated_vy);
-    sensor_gps.vel_n_m_s = rotated_vx;
-    sensor_gps.vel_e_m_s = rotated_vy;
+    sensor_gps.vel_n_m_s = -rotated_vy;
+    sensor_gps.vel_e_m_s = -rotated_vx;
     sensor_gps.vel_d_m_s = -vz;
-    sensor_gps.cog_rad = atan2(rotated_vy, rotated_vx);
+    sensor_gps.cog_rad = atan2(-rotated_vx, -rotated_vy);
     sensor_gps.vel_ned_valid = 1;
 
     sensor_gps.satellites_used = 16; //_lighthouse_count;
