@@ -298,6 +298,14 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose, SurviveVelocity velocit
 
     uint64_t timecode = getSystemTimeUSec() - _msg_ts_diff;
 
+    double qw = pose.Rot[0];
+    double qx = pose.Rot[1];
+    double qy = pose.Rot[2];
+    double qz = pose.Rot[3];
+
+    double siny_cosp = 2.0*(qw*qz + qx*qy);
+    double cosy_cosp = 1.0 - 2.0*(qy*qy + qz*qz);
+    double heading_rad = atan2(siny_cosp, cosy_cosp);
 /*
     RCLCPP_INFO(this->_node->get_logger(), "[%lu] lat: %.15lf, lon: %.15lf, alt: %.15lf",
         timecode, point.latitude, point.longitude, point.altitude);
@@ -316,14 +324,14 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose, SurviveVelocity velocit
     sensor_gps.vdop = 0.0f;
 
     sensor_gps.vel_m_s = sqrt(rotated_vx * rotated_vx + rotated_vy * rotated_vy);
-    sensor_gps.vel_n_m_s = -rotated_vy;
-    sensor_gps.vel_e_m_s = -rotated_vx;
+    sensor_gps.vel_n_m_s = rotated_vy;
+    sensor_gps.vel_e_m_s = rotated_vx;
     sensor_gps.vel_d_m_s = -vz;
-    sensor_gps.cog_rad = atan2(-rotated_vx, -rotated_vy);
+    sensor_gps.cog_rad = atan2(rotated_vx, rotated_vy);
     sensor_gps.vel_ned_valid = 1;
 
     sensor_gps.satellites_used = 16; //_lighthouse_count;
-    sensor_gps.heading = NAN;
+    sensor_gps.heading = heading_rad;
     sensor_gps.heading_offset = 0.0f;
 
     _publisher->publish(sensor_gps);
