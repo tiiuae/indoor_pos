@@ -296,7 +296,7 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose, SurviveVelocity velocit
     double rotated_vx = vx*cos(_north_offset) - vy*sin(_north_offset);
     double rotated_vy = vx*sin(_north_offset) + vy*cos(_north_offset);
 
-    uint64_t timecode = getSystemTimeUSec() - _msg_ts_diff;
+    uint64_t timecode = std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()).time_since_epoch().count();
 
     double qw = pose.Rot[0];
     double qx = pose.Rot[1];
@@ -329,6 +329,8 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose, SurviveVelocity velocit
     sensor_gps.vel_d_m_s = -vz;
     sensor_gps.cog_rad = atan2(rotated_vx, rotated_vy);
     sensor_gps.vel_ned_valid = 1;
+
+    sensor_gps.time_utc_usec = _node->now().nanoseconds() / 1000ULL;
 
     sensor_gps.satellites_used = 16; //_lighthouse_count;
     sensor_gps.heading = heading_rad;
