@@ -305,7 +305,9 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose, SurviveVelocity velocit
 
     double siny_cosp = 2.0*(qw*qz + qx*qy);
     double cosy_cosp = 1.0 - 2.0*(qy*qy + qz*qz);
-    double heading_rad = atan2(siny_cosp, cosy_cosp);
+    double heading_rad = atan2(siny_cosp, cosy_cosp) + Pi;
+    if (heading_rad >= Pi) heading_rad -= 2*Pi;
+
 /*
     RCLCPP_INFO(this->_node->get_logger(), "[%lu] lat: %.15lf, lon: %.15lf, alt: %.15lf",
         timecode, point.latitude, point.longitude, point.altitude);
