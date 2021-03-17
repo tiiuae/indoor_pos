@@ -2,10 +2,10 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>indoor_pos</name>
-  <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="jarix@ssrc.tii.ae">jnippula</maintainer>
-  <license>TODO: License declaration</license>
+  <version>1.0.0</version>
+  <description>ROS2 node to publish sensor_gps message from indoor positioning system</description>
+  <maintainer email="jarix@ssrc.tii.ae">Jari Nippula</maintainer>
+  <license>BSD</license>
 
   <depend>rclcpp</depend>
   <depend>geodesy</depend>
