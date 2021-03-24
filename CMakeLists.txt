@@ -41,6 +41,11 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}/
 )
 
+install(FILES
+  81-vive.rules
+  DESTINATION /etc/udev/rules.d/
+  COMPONENT "udev_rules")
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
