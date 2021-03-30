@@ -19,8 +19,8 @@
 -->
 
 <launch>
-  <arg name="lat" default="61.50361"/>
-  <arg name="lon" default="23.77500"/>
+  <arg name="lat" default="61.50341"/>
+  <arg name="lon" default="23.77509"/>
   <arg name="alt" default="110.0"/>
   <arg name="freq" default="10"/>
   <arg name="n_off" default="0.0"/>
