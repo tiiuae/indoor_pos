@@ -10,6 +10,12 @@
   <depend>rclcpp</depend>
   <depend>geodesy</depend>
   <depend>px4_msgs</depend>
+  <depend>survive</depend>
+
+  <depend>angles</depend>
+  <depend>geographic_msgs</depend>
+  <depend>atlas3-base</depend>
+  <depend>lapacke</depend>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
