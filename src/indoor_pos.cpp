@@ -109,9 +109,9 @@ IndoorPos::IndoorPos()
     _impl->_control_sub = this->create_subscription<std_msgs::msg::String>(
         "IndoorPos_ctrl", rclcpp::SystemDefaultsQoS(), std::bind(&IndoorPos::Control, this, _1));
     _impl->_sensorMag_sub = this->create_subscription<px4_msgs::msg::SensorMag>(
-        "SensorMag_PubSubTopic", rclcpp::SystemDefaultsQoS(), std::bind(&IndoorPos::SensorMag, this, _1));
+        "fmu/sensor_mag/out", rclcpp::SystemDefaultsQoS(), std::bind(&IndoorPos::SensorMag, this, _1));
 
-    _impl->_publisher = this->create_publisher<px4_msgs::msg::SensorGps>("SensorGps_PubSubTopic", rclcpp::SystemDefaultsQoS() );
+    _impl->_publisher = this->create_publisher<px4_msgs::msg::SensorGps>("fmu/sensor_gps/in", rclcpp::SystemDefaultsQoS() );
 
     if (_impl->_update_freq > 0)
     {
