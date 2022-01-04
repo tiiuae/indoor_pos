@@ -1,0 +1,17 @@
+px4_msgs:
+    ubuntu: [ros-ROS_DISTRO-px4-msgs]
+
+survive:
+    ubuntu: [libsurvive]
+
+angles:
+    ubuntu: [ros-ROS_DISTRO-angles]
+
+geographic_msgs:
+    ubuntu: [ros-ROS_DISTRO-geographic-msgs]
+
+atlas3-base:
+    ubuntu: [libatlas3-base]
+
+lapacke:
+    ubuntu: [liblapacke]
