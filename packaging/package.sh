@@ -10,6 +10,8 @@ Params:
     -h  Show help text.
     -b  Build number. This will be tha last digit of version string (x.x.N).
     -d  Distribution string in debian changelog.
+		-g  Git commit hash.
+		-v  Git version string
 "
 	exit 0
 }
@@ -31,10 +33,10 @@ mod_dir="$(realpath $(dirname $0)/..)"
 build_nbr=0
 distr=""
 version=""
-git_commit_hash="$(git rev-parse HEAD)"
-git_version_string="$(git log --date=format:%Y%m%d --pretty=~git%cd.%h -n 1)"
+git_commit_hash=""
+git_version_string=""
 
-while getopts "hb:d:" opt
+while getopts "hb:d:g:v:" opt
 do
 	case $opt in
 		h)
@@ -46,11 +48,24 @@ do
 		d)
 			check_arg $OPTARG && distr=$OPTARG || error_arg $opt
 			;;
+		g)
+			check_arg $OPTARG && git_commit_hash=$OPTARG || error_arg $opt
+			;;
+		v)
+			check_arg $OPTARG && git_version_string=$OPTARG || error_arg $opt
+			;;
 		\?)
 			usage
 			;;
 	esac
 done
+
+if [[ "$git_commit_hash" == "0" || -z "$git_commit_hash" ]]; then
+	git_commit_hash="$(git rev-parse HEAD)"
+fi
+if [[ "$git_version_string" == "0" || -z "$git_version_string" ]]; then
+	git_version_string="$(git log --date=format:%Y%m%d --pretty=~git%cd.%h -n 1)"
+fi
 
 ## Remove trailing '/' mark in module dir, if exists
 mod_dir=$(echo $mod_dir | sed 's/\/$//')
@@ -81,21 +96,12 @@ echo "[INFO] Version: ${version}."
 #* commit: ${git_commit_hash}
 #EOF_CHANGELOG
 
-# Extract not satisfied dependencies from output, check if they are exist in ../underlay.repos
-if rosdep check --from-paths ${mod_dir} 1> /dev/null 2>&1; then
-	echo "[INFO] Dependencies are satisfied."
-else
-	echo "[INFO] System dependencies have not been satisfied. Running rosdep install.."
-	echo "[INFO] Building dependencies using underlay.repos."
-	${mod_dir}/packaging/build_deps.sh ${mod_dir}
-fi
-
 if [ -e ${mod_dir}/ros2_ws ]; then
 	# From fog-sw repo.
 	source ${mod_dir}/ros2_ws/install/setup.bash
 fi
-if [ -e ${mod_dir}/deps_ws ]; then
-	source ${mod_dir}/deps_ws/install/setup.bash
+if [ -e ${mod_dir}/../deps_ws ]; then
+	source ${mod_dir}/../deps_ws/install/setup.bash
 fi
 
 if [ -e ${mod_dir}/debian ]; then
@@ -113,7 +119,7 @@ bloom-generate rosdebian --os-name ubuntu --os-version focal --ros-distro ${ROS_
 
 echo "[INFO] Clean up."
 
-rm -rf deps_ws obj-x86_64-linux-gnu debian
+rm -rf obj-x86_64-linux-gnu debian
 
 if [ -e ${mod_dir}/debian_bak ]; then
 	cp -r debian_bak debian
