@@ -61,12 +61,13 @@ jobs:
           jfrog rt ping
           for pkg in bin/*.deb
           do
+            pkg_name=$(basename $pkg)
             jfrog rt u --deb "$DISTRIBUTION/$COMPONENT/$ARCHITECTURE" \
                        --target-props COMMIT="$GITHUB_SHA" \
                        --build-name "$BUILD_NAME" \
                        --build-number "$GITHUB_SHA" \
                        "$pkg" \
-                       "$ARTIFACTORY_REPO"
+                       "$ARTIFACTORY_REPO/$pkg_name"
           done
           jfrog rt build-publish "$BUILD_NAME" "$GITHUB_SHA"
           jfrog rt bpr "$BUILD_NAME" "$GITHUB_SHA" "$ARTIFACTORY_REPO" \
