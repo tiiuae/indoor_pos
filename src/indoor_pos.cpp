@@ -13,7 +13,7 @@ Convert indoor positioning data from lighthouse to PX4 positioning sensor data
 #include <thread>
 #include <chrono>
 
-//#define INDOOR_USE_SIMULATOR
+#define INDOOR_USE_SIMULATOR
 
 const double Pi = 3.141592654;
 const uint8_t MagSensorAvgSampleCount = 12;
