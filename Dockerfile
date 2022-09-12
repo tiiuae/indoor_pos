@@ -1,31 +1,31 @@
-# fog-sw BUILDER
-ARG FROM_IMAGE
-FROM $FROM_IMAGE as fog-sw-builder
-ARG ROS_DISTRO="galactic"
-ARG UID=1000
-ARG GID=1000
-ARG PACKAGE_NAME
+FROM ghcr.io/tiiuae/fog-ros-baseimage:builder-2f516bb AS builder
 
-WORKDIR /$PACKAGE_NAME/main_ws
-USER root
-ADD . /$PACKAGE_NAME/main_ws/src
-RUN chown -R builder:builder /$PACKAGE_NAME/main_ws
+COPY . /main_ws/src/
 
-USER builder
+# this:
+# 1) builds the application
+# 2) packages the application as .deb in /main_ws/
+RUN echo "yaml file:///main_ws/src/packaging/rosdep.yaml" > /etc/ros/rosdep/sources.list.d/52-fogsw-module.list
+RUN /packaging/build.sh
 
-RUN if [ -e /$PACKAGE_NAME/deps_ws ]; then \
-        . /$PACKAGE_NAME/deps_ws/install/setup.sh && \
-        colcon build; \
-    elif [ -e /opt/ros/${ROS_DISTRO}/setup.sh ]; then \
-        . /opt/ros/${ROS_DISTRO}/setup.sh && \
-        colcon build; \
-    fi 
+#  ▲               runtime ──┐
+#  └── build                 ▼
 
-RUN sed --in-place \
-      's|^source .*|source "/'$PACKAGE_NAME'/main_ws/install/setup.bash"|' \
-      /$PACKAGE_NAME/entrypoint.sh && \  
-        chmod +x /$PACKAGE_NAME/entrypoint.sh
+FROM ghcr.io/tiiuae/fog-ros-baseimage:sha-2f516bb
 
-ENV PACKAGE_NAME $PACKAGE_NAME
-WORKDIR /$PACKAGE_NAME
-ENTRYPOINT "/"$PACKAGE_NAME"/entrypoint.sh"
+ENTRYPOINT /entrypoint.sh
+
+RUN apt-get update && \
+	apt-get install -y --no-install-recommends \
+        libsurvive \
+        ros-galactic-angles \
+        ros-galactic-geographic-msgs \
+        libatlas3-base \
+        liblapacke \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY entrypoint.sh /entrypoint.sh
+
+COPY --from=builder /main_ws/ros-*-indoor-pos_*_amd64.deb /indoor_pos.deb
+RUN dpkg -i /indoor_pos.deb && rm /indoor_pos.deb
+
