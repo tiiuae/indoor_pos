@@ -54,7 +54,7 @@ public:
 
     rclcpp::Publisher<px4_msgs::msg::SensorGps>::SharedPtr _publisher;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr  _control_sub;
-    rclcpp::Subscription<px4_msgs::msg::SensorMag>::SharedPtr  _sensorMag_sub;
+    rclcpp::Subscription<px4_msgs::msg::SensorBaro>::SharedPtr  _sensorBaro_sub;
 };
 
 IndoorPos::IndoorPos()
@@ -108,8 +108,8 @@ IndoorPos::IndoorPos()
 
     _impl->_control_sub = this->create_subscription<std_msgs::msg::String>(
         "IndoorPos_ctrl", rclcpp::SystemDefaultsQoS(), std::bind(&IndoorPos::Control, this, _1));
-    _impl->_sensorMag_sub = this->create_subscription<px4_msgs::msg::SensorMag>(
-        "/fmu/out/SensorMag", rclcpp::SystemDefaultsQoS(), std::bind(&IndoorPos::SensorMag, this, _1));
+    _impl->_sensorBaro_sub = this->create_subscription<px4_msgs::msg::SensorBaro>(
+        "/fmu/out/SensorBaro", rclcpp::SystemDefaultsQoS(), std::bind(&IndoorPos::SensorBaro, this, _1));
 
     _impl->_publisher = this->create_publisher<px4_msgs::msg::SensorGps>("/fmu/in/SensorGps", rclcpp::SystemDefaultsQoS() );
 
@@ -159,7 +159,7 @@ void IndoorPos::surviveSpinTimerCallback()
     _que.push(1);
 }
 
-void IndoorPos::SensorMag(const px4_msgs::msg::SensorMag::SharedPtr msg) const
+void IndoorPos::SensorBaro(const px4_msgs::msg::SensorBaro::SharedPtr msg) const
 {
     uint64_t curr_stamp = _impl->getSystemTimeUSec();
     _impl->_last_timestamp = msg->timestamp;
@@ -168,8 +168,6 @@ void IndoorPos::SensorMag(const px4_msgs::msg::SensorMag::SharedPtr msg) const
     {
         _impl->_msg_ts_diff = diff;
     }
-    double rad_a = -atan2(msg->y, msg->x);
-    _impl->calcAngle(rad_a);
 }
 
 void IndoorPos::Control(const std_msgs::msg::String::SharedPtr msg) const
@@ -223,11 +221,6 @@ void IndoorPosPrivate::calcAngle(double rad_a)
     if (angle > 2*Pi) angle -= 2*Pi;
     _last_angle = angle;
 
-/*
-    double deg = (angle / (2*Pi)) * 360.0;
-    RCLCPP_INFO(this->_node->get_logger(), "SensorMag: angle %.15lf (%lf), noff:%lf",
-        deg, angle, _north_offset);
-*/
 }
 
 int IndoorPosPrivate::restart()
@@ -312,8 +305,8 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose, SurviveVelocity velocit
         timecode, point.latitude, point.longitude, point.altitude);
 */
     px4_msgs::msg::SensorGps sensor_gps;
-    //sensor_gps.timestamp = timecode;
-    sensor_gps.timestamp = _node->now().nanoseconds() / 1000ULL;
+    sensor_gps.timestamp = _last_timestamp;
+    //sensor_gps.timestamp = _node->now().nanoseconds() / 1000ULL;
     sensor_gps.lat = (uint32_t) (point.latitude  * 10000000);
     sensor_gps.lon = (uint32_t) (point.longitude * 10000000);
     sensor_gps.alt = (uint32_t) (point.altitude  * 1000);

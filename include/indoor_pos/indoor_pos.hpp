@@ -3,7 +3,7 @@
 
 #include <sys/types.h>
 #include <rclcpp/rclcpp.hpp>
-#include <px4_msgs/msg/sensor_mag.hpp>
+#include <px4_msgs/msg/sensor_baro.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <queue>
 
@@ -18,7 +18,7 @@ public:
 
 private:
     void surviveSpinTimerCallback();
-    void SensorMag(const px4_msgs::msg::SensorMag::SharedPtr msg) const;
+    void SensorBaro(const px4_msgs::msg::SensorBaro::SharedPtr msg) const;
     void Control(const std_msgs::msg::String::SharedPtr msg) const;
 
     int _spin_timer_ms = 100;
