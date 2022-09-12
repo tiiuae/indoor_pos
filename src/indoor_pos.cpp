@@ -109,9 +109,9 @@ IndoorPos::IndoorPos()
     _impl->_control_sub = this->create_subscription<std_msgs::msg::String>(
         "IndoorPos_ctrl", rclcpp::SystemDefaultsQoS(), std::bind(&IndoorPos::Control, this, _1));
     _impl->_sensorMag_sub = this->create_subscription<px4_msgs::msg::SensorMag>(
-        "fmu/sensor_mag/out", rclcpp::SystemDefaultsQoS(), std::bind(&IndoorPos::SensorMag, this, _1));
+        "/fmu/out/SensorMag", rclcpp::SystemDefaultsQoS(), std::bind(&IndoorPos::SensorMag, this, _1));
 
-    _impl->_publisher = this->create_publisher<px4_msgs::msg::SensorGps>("fmu/sensor_gps/in", rclcpp::SystemDefaultsQoS() );
+    _impl->_publisher = this->create_publisher<px4_msgs::msg::SensorGps>("/fmu/in/SensorGps", rclcpp::SystemDefaultsQoS() );
 
     if (_impl->_update_freq > 0)
     {
@@ -296,7 +296,7 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose, SurviveVelocity velocit
     double rotated_vx = vx*cos(_north_offset) - vy*sin(_north_offset);
     double rotated_vy = vx*sin(_north_offset) + vy*cos(_north_offset);
 
-    uint64_t timecode = std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()).time_since_epoch().count();
+    //uint64_t timecode = std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()).time_since_epoch().count();
 
     double qw = pose.Rot[0];
     double qx = pose.Rot[1];
@@ -312,7 +312,8 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose, SurviveVelocity velocit
         timecode, point.latitude, point.longitude, point.altitude);
 */
     px4_msgs::msg::SensorGps sensor_gps;
-    sensor_gps.timestamp = timecode;
+    //sensor_gps.timestamp = timecode;
+    sensor_gps.timestamp = _node->now().nanoseconds() / 1000ULL;
     sensor_gps.lat = (uint32_t) (point.latitude  * 10000000);
     sensor_gps.lon = (uint32_t) (point.longitude * 10000000);
     sensor_gps.alt = (uint32_t) (point.altitude  * 1000);
