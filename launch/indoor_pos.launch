@@ -27,7 +27,7 @@
   <arg name="decl" default="0.0"/>
   <arg name="mag" default="0"/>
 
-  <node name="indoor_pos" pkg="indoor_pos" exec="indoor_pos" namespace='$(env DRONE_DEVICE_ID)'>
+  <node name="indoor_pos" pkg="indoor_pos" exec="indoor_pos">
     <param name="home_lat" value="$(var lat)"/>
     <param name="home_lon" value="$(var lon)"/>
     <param name="home_alt" value="$(var alt)"/>
