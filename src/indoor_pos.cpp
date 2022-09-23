@@ -305,8 +305,8 @@ void IndoorPosPrivate::IndoorPosUpdate(SurvivePose pose, SurviveVelocity velocit
         timecode, point.latitude, point.longitude, point.altitude);
 */
     px4_msgs::msg::SensorGps sensor_gps;
-    sensor_gps.timestamp = _last_timestamp;
-    //sensor_gps.timestamp = _node->now().nanoseconds() / 1000ULL;
+    //sensor_gps.timestamp = _last_timestamp;
+    sensor_gps.timestamp = _node->now().nanoseconds() / 1000ULL;
     sensor_gps.lat = (uint32_t) (point.latitude  * 10000000);
     sensor_gps.lon = (uint32_t) (point.longitude * 10000000);
     sensor_gps.alt = (uint32_t) (point.altitude  * 1000);
